@@ -1,23 +1,14 @@
-#!/usr/bin/env python3
-# -*- coding: UTF-8 -*-
 
 """
 Hurst exponent and RS-analysis
-https://en.wikipedia.org/wiki/Hurst_exponent
-https://en.wikipedia.org/wiki/Rescaled_range
+https://github.com/Mottl/hurst
 """
 
-name = "hurst"
-__version__ = '0.0.5'
-
-import sys
 import math
 import warnings
 import numpy as np
-try:
-    import pandas as pd
-except:
-    pass
+import pandas as pd
+
 
 def __to_inc(x):
     incs = x[1:] - x[:-1]
@@ -28,16 +19,14 @@ def __to_pct(x):
     return pcts
 
 def __get_simplified_RS(series, kind):
-    """
-    Simplified version of rescaled range
+    """Simplified version of rescaled range
 
-    Parameters
-    ----------
+    Args:
+        series (array-like): Time Series
+        kind (str): The kind of series (refer to compute_Hc docstring)
 
-    series : array-like
-        (Time-)series
-    kind : str
-        The kind of series (refer to compute_Hc docstring)
+    Returns:
+        [float]: R/S ratio
     """
 
     if kind == 'random_walk':
@@ -65,13 +54,12 @@ def __get_RS(series, kind):
     of deviations instead of the range of a series as in the simplified version
     of R/S) from a time-series of values.
 
-    Parameters
-    ----------
+    Args:
+        series (array-like): Time Series
+        kind (str): The kind of series (refer to compute_Hc docstring)
 
-    series : array-like
-        (Time-)series
-    kind : str
-        The kind of series (refer to compute_Hc docstring)
+    Returns:
+        [float]: R/S ratio
     """
 
     if kind == 'random_walk':
@@ -81,7 +69,6 @@ def __get_RS(series, kind):
         Z = np.cumsum(deviations)
         R = max(Z) - min(Z)
         S = np.std(incs, ddof=1)
-
     elif kind == 'price':
         incs = __to_pct(series)
         mean_inc = np.sum(incs) / len(incs)
@@ -89,7 +76,6 @@ def __get_RS(series, kind):
         Z = np.cumsum(deviations)
         R = max(Z) - min(Z)
         S = np.std(incs, ddof=1)
-
     elif kind == 'change':
         incs = series
         mean_inc = np.sum(incs) / len(incs)
@@ -103,74 +89,51 @@ def __get_RS(series, kind):
 
     return R / S
 
-def compute_Hc(series, kind="random_walk", min_window=10, max_window=None, simplified=True):
+def compute_Hc(series, kind="price", min_window=10, max_window=None, simplified=True):
     """
     Compute H (Hurst exponent) and C according to Hurst equation:
     E(R/S) = c * T^H
 
     Refer to:
-    https://en.wikipedia.org/wiki/Hurst_exponent
-    https://en.wikipedia.org/wiki/Rescaled_range
-    https://en.wikipedia.org/wiki/Random_walk
+        https://en.wikipedia.org/wiki/Hurst_exponent
+        https://en.wikipedia.org/wiki/Rescaled_range
+        https://en.wikipedia.org/wiki/Random_walk
 
-    Parameters
-    ----------
+    Args:
+        series (array-like): Time Series
+        kind (str, optional): Kind of series. Defaults to "random_walk".
+            'random_walk' means that a series is a random walk with random increments
+            'price' means that a series is a random walk with random multipliers
+            'change' means that a series consists of random increments,
+                thus produced random walk is a cumulative sum of increments
+        min_window (int, optional): the minimal window size for R/S calculation. Defaults to 10.
+        max_window (int, optional): the maximal window size for R/S calculation. Defaults to the length of series minus 1.
+        simplified (bool, optional): whether to use the simplified or the original version of R/S calculation. Defaults to True.
 
-    series : array-like
-        (Time-)series
+    Raises:
+        ValueError: Series length must be greater or equal to 100
+        ValueError: Series contains NaNs
 
-    kind : str
-        Kind of series
-        possible values are 'random_walk', 'change' and 'price':
-        - 'random_walk' means that a series is a random walk with random increments;
-        - 'price' means that a series is a random walk with random multipliers;
-        - 'change' means that a series consists of random increments
-            (thus produced random walk is a cumulative sum of increments);
-
-    min_window : int, default 10
-        the minimal window size for R/S calculation
-
-    max_window : int, default is the length of series minus 1
-        the maximal window size for R/S calculation
-
-    simplified : bool, default True
-        whether to use the simplified or the original version of R/S calculation
-
-    Returns tuple of
+    Returns:
         H, c and data
         where H and c — parameters or Hurst equation
         and data is a list of 2 lists: time intervals and R/S-values for correspoding time interval
         for further plotting log(data[0]) on X and log(data[1]) on Y
     """
+    series = np.array(series)
 
-    if len(series)<100:
+    if len(series) < 100:
         raise ValueError("Series length must be greater or equal to 100")
-
-    ndarray_likes = [np.ndarray]
-    if "pandas.core.series" in sys.modules.keys():
-        ndarray_likes.append(pd.core.series.Series)
-
-    # convert series to numpy array if series is not numpy array or pandas Series
-    if type(series) not in ndarray_likes:
-        series = np.array(series)
-
-    if "pandas.core.series" in sys.modules.keys() and type(series) == pd.core.series.Series:
-        if series.isnull().values.any():
-            raise ValueError("Series contains NaNs")
-        series = series.values  # convert pandas Series to numpy array
-    elif np.isnan(np.min(series)):
+    if np.isnan(np.min(series)):
         raise ValueError("Series contains NaNs")
 
-    if simplified:
-        RS_func = __get_simplified_RS
-    else:
-        RS_func = __get_RS
+    RS_func = __get_simplified_RS if simplified else __get_RS
 
-
+    # Set how floating-point errors are handled
     err = np.geterr()
     np.seterr(all='raise')
 
-    max_window = max_window or len(series)-1
+    max_window = max_window or (len(series) - 1)
     window_sizes = list(map(
         lambda x: int(10**x),
         np.arange(math.log10(min_window), math.log10(max_window), 0.25)))
@@ -180,7 +143,7 @@ def compute_Hc(series, kind="random_walk", min_window=10, max_window=None, simpl
     for w in window_sizes:
         rs = []
         for start in range(0, len(series), w):
-            if (start+w)>len(series):
+            if (start+w) > len(series):
                 break
             _ = RS_func(series[start:start+w], kind)
             if _ != 0:
@@ -195,26 +158,28 @@ def compute_Hc(series, kind="random_walk", min_window=10, max_window=None, simpl
     return H, c, [window_sizes, RS]
 
 def random_walk(length, proba=0.5, min_lookback=1, max_lookback=100, cumprod=False):
+    """Generates a random walk series
+
+    Args:
+        length (int): series length
+        proba (float, optional): the probability that the next increment will follow the trend.
+            Set proba > 0.5 for the persistent random walk,
+            set proba < 0.5 for the antipersistent one
+            Defaults to 0.5.
+
+        min_lookback (int, optional): minimum window sizes to calculate trend direction.
+            Defaults to 1.
+        max_lookback (int, optional): maximum window sizes to calculate trend direction.
+            Defaults to 100.
+        cumprod (bool, optional): generate a random walk as a cumulative product instead of cumulative sum.
+            Defaults to False.
+
+    Returns:
+        [array]: random walk series
     """
-    Generates a random walk series
 
-    Parameters
-    ----------
-
-    proba : float, default 0.5
-        the probability that the next increment will follow the trend.
-        Set proba > 0.5 for the persistent random walk,
-        set proba < 0.5 for the antipersistent one
-
-    min_lookback: int, default 1
-    max_lookback: int, default 100
-        minimum and maximum window sizes to calculate trend direction
-    cumprod : bool, default False
-        generate a random walk as a cumulative product instead of cumulative sum
-    """
-
-    assert(min_lookback>=1)
-    assert(max_lookback>=min_lookback)
+    assert (min_lookback >= 1)
+    assert (max_lookback >= min_lookback)
 
     if max_lookback > length:
         max_lookback = length
@@ -240,35 +205,3 @@ def random_walk(length, proba=0.5, min_lookback=1, max_lookback=100, cumprod=Fal
             series[i] = series[i-1] * np.fabs(1 + np.random.randn()/1000. * direction)
 
     return series
-
-
-if __name__ == '__main__':
-
-    # Use random_walk() function or generate a random walk series manually:
-    # series = random_walk(99999, cumprod=True)
-    np.random.seed(42)
-    random_changes = 1. + np.random.randn(99999) / 1000.
-    series = np.cumprod(random_changes)  # create a random walk from random changes
-
-    # Evaluate Hurst equation
-    H, c, data = compute_Hc(series, kind='price', simplified=True)
-
-    # Plot
-    # uncomment the following to make a plot using Matplotlib:
-    """
-    import matplotlib.pyplot as plt
-
-    f, ax = plt.subplots()
-    ax.plot(data[0], c*data[0]**H, color="deepskyblue")
-    ax.scatter(data[0], data[1], color="purple")
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.set_xlabel('Time interval')
-    ax.set_ylabel('R/S ratio')
-    ax.grid(True)
-    plt.show()
-    """
-
-    print("H={:.4f}, c={:.4f}".format(H,c))
-    assert H<0.6 and H>0.4
-
